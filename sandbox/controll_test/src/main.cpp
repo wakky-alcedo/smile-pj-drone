@@ -7,9 +7,10 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <FS.h>
-#include <SPIFFS.h>
 
+#include "TelloESP32.h"
 #include <Ps3Controller.h>
+
 
 int player = 0;
 int battery_ps3 = 0;
@@ -18,15 +19,6 @@ int battery_ps3 = 0;
 // pin
 const int buttonPin = 0;
 const int ledPin = 2;
-
-// WiFi - AP mode (for self)
-String ssidAp = "TELLO-Controller";
-String passwordAp = "tellocon";
-const IPAddress ipAp(192, 168, 4, 1);
-const IPAddress gatewayAp = ipAp;
-const IPAddress subnetAp(255, 255, 255, 0);
-const int udpPortAp = 1060;
-const int receiveBufferLen = 64;
 
 // WiFi - Client mode (for Tello)
 String ssidTello = "TELLO-CCDE6B";  // overridden later
@@ -64,7 +56,6 @@ int buttonState = HIGH;
 
 // WiFi - AP mode (for self)
 WiFiUDP udp;
-char receiveBuffer[receiveBufferLen];
 
 // WiFi - Client mode (for Tello)
 bool connectedTello = false;
@@ -78,6 +69,15 @@ void connectToWiFi(const char *ssid, const char *password);
 void wifiEvent(WiFiEvent_t event);
 String listenMessage();
 void sendMessage(char* ReplyBuffer);
+
+const char* TELLO_SSID = "TELLO-CCDE6B";  // Replace with your Tello's SSID
+const char* TELLO_PASSWORD = "";          // Tello's WiFi password (usually empty)
+TelloControl::TelloESP32 tello;
+// Error handler callback function
+void onTelloError(const char* command, const char* errorMessage) {
+    Serial.printf("Error during '%s': %s\n", command, errorMessage);
+}
+
 // controller
 void onConnect();
 // timer interrupt
@@ -103,6 +103,11 @@ void setup() {
     Serial.println(passwordTello);
     connectToWiFi(ssidTello.c_str(), passwordTello.c_str());
     digitalWrite(ledPin, LOW);
+
+    tello.setErrorCallback(onTelloError);
+    // Connect to Tello
+    tello.connect(TELLO_SSID, TELLO_PASSWORD);
+    Serial.println("Connected! Starting flight sequence...");
 
     // コントローラ接続
     // ESP32のMACアドレスを表示
