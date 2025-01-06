@@ -1,3 +1,5 @@
+// [NefryBT(ESP32)でTelloを制御。1回だけ離陸して着陸する Arduino - Qiita](https://qiita.com/n0bisuke/items/0dc2039da20a5f12f2d5)
+
 #include <WiFiUDP.h>
 
 const char* TELLO_IP = "192.168.10.1";
