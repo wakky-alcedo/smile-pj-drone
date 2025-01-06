@@ -77,6 +77,7 @@ void writeTextFile(String filename, String text, char *mode);
 String readTextFile(String filename);
 void connectToWiFi(const char *ssid, const char *password);
 void wifiEvent(WiFiEvent_t event);
+String listenMessage();
 void sendMessage(char* ReplyBuffer);
 
 // -- setup function
@@ -113,9 +114,9 @@ void setup() {
         Serial.print("AP IP address : ");
         Serial.println(myIP);
 
-        // UDP
+        // udp
         udp.begin(udpPortAp);
-        Serial.print("AP UDP port : ");
+        Serial.print("AP udp port : ");
         Serial.println(udpPortAp);
         digitalWrite(ledPin, LOW);
 
@@ -220,7 +221,7 @@ void controlTelloProcess(void)
     //         delay(arg.toInt());
             
     //     } else {
-    //         // send to UDP
+    //         // send to udp
     //         Serial.print("send : ");
     //         Serial.println(sendData);
     //         udp.beginPacket(ipTello.c_str(), udpPortTello);
@@ -237,29 +238,34 @@ void controlTelloProcess(void)
 
     Serial.println("start");
     udp.begin(udpPortTello);
+
+    String message = "";
     
     sendMessage("command");
-    // message = listenMessage();
+    message = listenMessage();
     Serial.println(":command");
-    // Serial.println(message);
+    Serial.println(message);
     delay(1000);
 
     //離陸
     sendMessage("takeoff");
+    delay(1000);
+    sendMessage("takeoff");
     Serial.println(":takeoff");
-    // message = listenMessage();
-    // Serial.println(message);
+    message = listenMessage();
+    Serial.println(message);
+    sendMessage("takeoff");
     delay(3000);
 
     //着陸
     Serial.println(":land...");
     for (uint8_t i = 0; i < 10; i++) {
         sendMessage("land");
-        delay(1000);
+        delay(700);
     }
     Serial.println(":...land");
-    // message = listenMessage();
-    // Serial.println(message);
+    message = listenMessage();
+    Serial.println(message);
 
     Serial.println("finish!");
 }
@@ -340,7 +346,7 @@ void wifiEvent(WiFiEvent_t event){
             Serial.print("IP address : ");
             Serial.println(WiFi.localIP());
 
-            //initialize UDP
+            //initialize udp
             udp.begin(WiFi.localIP(), udpPortTello);
             connectedTello = true;
             break;
@@ -351,6 +357,31 @@ void wifiEvent(WiFiEvent_t event){
             connectedTello = false;
             break;
     }
+}
+
+//Telloからのレスポンスを確認する関数
+String listenMessage() {
+    char packetBuffer[255];
+    int packetSize = udp.parsePacket();
+    if (packetSize) {
+        Serial.print("Received packet of size ");
+        Serial.println(packetSize);
+        Serial.print("From ");
+        IPAddress remoteIp = udp.remoteIP();
+        Serial.print(remoteIp);
+        Serial.print(", port ");
+        Serial.println(udp.remotePort());
+
+        // read the packet into packetBufffer
+        int len = udp.read(packetBuffer, 255);
+        if (len > 0) {
+        packetBuffer[len] = 0;
+        }
+        Serial.println("Contents:");
+        Serial.println(packetBuffer);
+    }
+    // this only works as tello's API doesn't return responses greater than 255 char
+    return (char*) packetBuffer;
 }
 
 //UDPでTelloに命令を送る関数
