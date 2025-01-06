@@ -200,9 +200,14 @@ void setup()
 {
     Serial.begin(115200);
 
+    // MACアドレスを表示
+    uint8_t btmac[6];
+    esp_read_mac(btmac, ESP_MAC_BT);
+    Serial.printf("[Bluetooth] Mac Address = %02X:%02X:%02X:%02X:%02X:%02X\r\n", btmac[0], btmac[1], btmac[2], btmac[3], btmac[4], btmac[5]);
+
     Ps3.attach(notify);
     Ps3.attachOnConnect(onConnect);
-    Ps3.begin("01:02:03:04:05:06"); // todo これ変更する
+    Ps3.begin("88:13:BF:0D:6D:A6"); // todo ここにESP32のMACアドレスを入れる
 
     Serial.println("Ready.");
 }
