@@ -69,9 +69,6 @@ char receiveBuffer[receiveBufferLen];
 // WiFi - Client mode (for Tello)
 bool connectedTello = false;
 
-// other
-bool settingModeEnable = false;
-
 // -- function prototype
 void setup();
 void loop();
@@ -83,6 +80,9 @@ String listenMessage();
 void sendMessage(char* ReplyBuffer);
 // controller
 void onConnect();
+// timer interrupt
+hw_timer_t * timer = NULL;
+void IRAM_ATTR onTimer();
 
 // -- setup function
 void setup() {
@@ -113,6 +113,12 @@ void setup() {
     // Ps3.attach(notify);
     Ps3.attachOnConnect(onConnect);
     Ps3.begin("88:13:BF:0D:6D:A6"); // todo ここにESP32のMACアドレスを入れる
+
+    // タイマー割り込み
+    timer = timerBegin(0, 80, true);
+    timerAttachInterrupt(timer, &onTimer, true);
+    timerAlarmWrite(timer, 10000, true); // 10ms
+    timerAlarmEnable(timer);
 
     Serial.println("Ready.");
 }
@@ -242,5 +248,37 @@ void sendMessage(char* ReplyBuffer) {
 // -- controller function
 void onConnect(){
     Serial.println("Connected.");
+}
+
+// -- timer interrupt function
+uint32_t sub_counter = 0;
+void IRAM_ATTR onTimer(){
+    // Serial.println(battery_ps3);
+    if (battery_ps3 < 20) {
+        Ps3.setRumble(1.0, 1000);
+    }
+
+    sub_counter++;
+    if (sub_counter >= 100) { // 1000ms
+        battery_ps3 = Ps3.data.status.battery;
+        switch (battery_ps3) {
+        case ps3_status_battery_full:
+            Ps3.setPlayer(10);
+            break;
+        case ps3_status_battery_high:
+            Ps3.setPlayer(9);
+            break;
+        case ps3_status_battery_low:
+            Ps3.setPlayer(7);
+            break;
+        case ps3_status_battery_dying:
+            Ps3.setPlayer(4);
+            break;
+        case ps3_status_battery_shutdown:
+            Ps3.setPlayer(0);
+            break;
+        }
+        sub_counter = 0;
+    }
 }
 
