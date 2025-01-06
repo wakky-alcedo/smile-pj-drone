@@ -9,6 +9,11 @@
 #include <FS.h>
 #include <SPIFFS.h>
 
+#include <Ps3Controller.h>
+
+int player = 0;
+int battery_ps3 = 0;
+
 // -- literal
 // pin
 const int buttonPin = 0;
@@ -70,11 +75,14 @@ bool settingModeEnable = false;
 // -- function prototype
 void setup();
 void loop();
+// drone
 void controlTelloProcess(void);
 void connectToWiFi(const char *ssid, const char *password);
 void wifiEvent(WiFiEvent_t event);
 String listenMessage();
 void sendMessage(char* ReplyBuffer);
+// controller
+void onConnect();
 
 // -- setup function
 void setup() {
@@ -95,6 +103,18 @@ void setup() {
     Serial.println(passwordTello);
     connectToWiFi(ssidTello.c_str(), passwordTello.c_str());
     digitalWrite(ledPin, LOW);
+
+    // コントローラ接続
+    // ESP32のMACアドレスを表示
+    uint8_t btmac[6];
+    esp_read_mac(btmac, ESP_MAC_BT);
+    Serial.printf("[Bluetooth] Mac Address = %02X:%02X:%02X:%02X:%02X:%02X\r\n", btmac[0], btmac[1], btmac[2], btmac[3], btmac[4], btmac[5]);
+    // 接続
+    // Ps3.attach(notify);
+    Ps3.attachOnConnect(onConnect);
+    Ps3.begin("88:13:BF:0D:6D:A6"); // todo ここにESP32のMACアドレスを入れる
+
+    Serial.println("Ready.");
 }
 
 // -- main loop function
@@ -126,7 +146,7 @@ void controlTelloProcess(void)
     Serial.println(message);
     delay(1000);
 
-    //離陸
+    // 離陸
     sendMessage("takeoff");
     delay(1000);
     sendMessage("takeoff");
@@ -136,7 +156,7 @@ void controlTelloProcess(void)
     sendMessage("takeoff");
     delay(3000);
 
-    //着陸
+    // 着陸
     Serial.println(":land...");
     for (uint8_t i = 0; i < 10; i++) {
         sendMessage("land");
@@ -217,5 +237,10 @@ void sendMessage(char* ReplyBuffer) {
     udp.beginPacket(ipTello.c_str(), udpPortTello);
     udp.printf(ReplyBuffer);
     udp.endPacket();
+}
+
+// -- controller function
+void onConnect(){
+    Serial.println("Connected.");
 }
 
