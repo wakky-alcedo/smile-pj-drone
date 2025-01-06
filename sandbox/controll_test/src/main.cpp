@@ -24,8 +24,8 @@ const int udpPortAp = 1060;
 const int receiveBufferLen = 64;
 
 // WiFi - Client mode (for Tello)
-String ssidTello = "TELLO-XXXXXX";  // overridden later
-String passwordTello = "password";  // overridden later
+String ssidTello = "TELLO-CCDE6B";  // overridden later
+String passwordTello = "";  // overridden later
 String ipTello = "192.168.10.1";
 const int udpPortTello = 8889;
 
@@ -70,11 +70,7 @@ bool settingModeEnable = false;
 // -- function prototype
 void setup();
 void loop();
-void settingProcess(void);
-void selectFunction(String packet);
 void controlTelloProcess(void);
-void writeTextFile(String filename, String text, char *mode);
-String readTextFile(String filename);
 void connectToWiFi(const char *ssid, const char *password);
 void wifiEvent(WiFiEvent_t event);
 String listenMessage();
@@ -91,151 +87,34 @@ void setup() {
     delay(100); // required delay
     digitalWrite(ledPin, HIGH);
 
-    // file system (on internal Flash memory)
-    SPIFFS.begin(true);
-
-    // -- determine the operation mode at startup
-    buttonState = digitalRead(buttonPin);
-    if (buttonState == LOW) {
-        settingModeEnable = true;
-    }
-    Serial.print("settingModeEnable : ");
-    Serial.println(settingModeEnable);
-
-    if (settingModeEnable == true) {
-
-        // -- setting mode
-        // WiFi
-        Serial.println("Initialize WiFi");
-        WiFi.softAP(ssidAp.c_str(), passwordAp.c_str());
-        delay(100); // required delay
-        WiFi.softAPConfig(ipAp, gatewayAp, subnetAp);
-        IPAddress myIP = WiFi.softAPIP();
-        Serial.print("AP IP address : ");
-        Serial.println(myIP);
-
-        // udp
-        udp.begin(udpPortAp);
-        Serial.print("AP udp port : ");
-        Serial.println(udpPortAp);
-        digitalWrite(ledPin, LOW);
-
-    } else {
-        // -- client mode
-        // WiFi connect to Tello
-        // ssidTello = readTextFile("SSID.txt");
-        ssidTello = "TELLO-CCDE6B";
-        Serial.print("SSID Tello : ");
-        Serial.println(ssidTello);
-        // passwordTello = readTextFile("PASS.txt");
-        passwordTello = "";
-        Serial.print("Password Tello : ");
-        Serial.println(passwordTello);
-        connectToWiFi(ssidTello.c_str(), passwordTello.c_str());
-        digitalWrite(ledPin, LOW);
-    }
+    // -- client mode
+    // WiFi connect to Tello
+    Serial.print("SSID Tello : ");
+    Serial.println(ssidTello);
+    Serial.print("Password Tello : ");
+    Serial.println(passwordTello);
+    connectToWiFi(ssidTello.c_str(), passwordTello.c_str());
+    digitalWrite(ledPin, LOW);
 }
 
 // -- main loop function
 void loop() {
-    // check mode
-    if (settingModeEnable == true) {
-
-        // -- setting mode
-        digitalWrite(ledPin, HIGH);
-        settingProcess();
-
-    } else {
-
-        // -- client mode
-        if (connectedTello == true)
-        {
-        digitalWrite(ledPin, HIGH);
-        buttonState = digitalRead(buttonPin);
-        if (buttonState == LOW) {
-            controlTelloProcess();
-        }
-        } else {
-        digitalWrite(ledPin, LOW);
-        }
-    }
-}
-
-// -- setting mode process function
-void settingProcess(void)
-{
-    int receiveLength = udp.parsePacket();
-    if (receiveLength) {
-        udp.read(receiveBuffer, receiveBufferLen);
-        String onePacket = String(receiveBuffer).substring(0, receiveLength);
-        Serial.println(onePacket);
-        selectFunction(onePacket);
-    }
-}
-
-// -- select function from table
-void selectFunction(String packet)
-{
-    int index = packet.indexOf(":");
-    int len = packet.length();
-    String rcvCmd = packet.substring(0, index);
-
-    int i = 0;
-    while (settingCommandTable[i].cmd != NULL)
+    // -- client mode
+    if (connectedTello == true)
     {
-        // serch matched command from table
-        if (rcvCmd.equals(settingCommandTable[i].cmd))
-        {
-        // call function
-        String arg = packet.substring(index+1, len);
-        settingCommandTable[i].func(arg);
-        break;
-        }
-        i++;
+    digitalWrite(ledPin, HIGH);
+    buttonState = digitalRead(buttonPin);
+    if (buttonState == LOW) {
+        controlTelloProcess();
+    }
+    } else {
+    digitalWrite(ledPin, LOW);
     }
 }
 
 // -- client(controll Tello) mode process function
 void controlTelloProcess(void)
 {
-    String fileData = readTextFile("DRONECMD.txt");
-    int fileDataLen = fileData.length();
-    int indexPos = 0;
-    int startPos = 0;
-    int delayIndexPos = 0;
-
-    // while(1)
-    // {
-    //     indexPos = fileData.indexOf(",", startPos);
-    //     if (indexPos != -1)
-    //     {
-    //     // cut text to comma
-    //     String sendData = fileData.substring(startPos, indexPos);
-
-    //     if (sendData.startsWith("delay "))
-    //     {
-    //         delayIndexPos = sendData.indexOf(" ");
-    //         String arg = sendData.substring(delayIndexPos + 1);
-    //         Serial.print("delay : ");
-    //         Serial.println(arg);
-    //         delay(arg.toInt());
-            
-    //     } else {
-    //         // send to udp
-    //         Serial.print("send : ");
-    //         Serial.println(sendData);
-    //         udp.beginPacket(ipTello.c_str(), udpPortTello);
-    //         udp.printf(sendData.c_str());
-    //         udp.endPacket();
-    //     }
-    //     startPos = indexPos + 1;
-
-    //     } else {
-    //     // end of file
-    //     break;
-    //     }
-    // }
-
     Serial.println("start");
     udp.begin(udpPortTello);
 
@@ -268,57 +147,6 @@ void controlTelloProcess(void)
     Serial.println(message);
 
     Serial.println("finish!");
-}
-
-// -- write ssid to SSID.txt
-// registered functions in table
-void writeSsid(String arg)
-{
-    writeTextFile("SSID.txt", arg, "w");
-}
-
-// -- write password to PASS.txt
-// registered functions in table
-void writePass(String arg)
-{
-    writeTextFile("PASS.txt", arg, "w");
-}
-
-// -- write command to DRONECMD.txt
-// registered functions in table
-void writeDroneCmd(String arg)
-{
-  // append csv format data to end of file
-    String writeArg = arg + ',';
-    writeTextFile("DRONECMD.txt", writeArg, "a");
-}
-
-// -- clear DRONECMD.txt
-// registered functions in table
-void clearDroneCmd(String arg)
-{
-    writeTextFile("DRONECMD.txt", arg, "w");
-}
-
-// -- write data to file(internal flash memory)
-void writeTextFile(String filename, String text, char *mode) {
-    File fd = SPIFFS.open("/" + filename, mode);
-    if (!fd) {
-        Serial.println("open error:write");
-    }
-    fd.print(text);
-    fd.close();
-}
-
-// -- read data from file(internal flash memory)
-String readTextFile(String filename) {
-    File fd = SPIFFS.open("/" + filename, "r");
-    String text = fd.readStringUntil('\n');
-    if (!fd) {
-        Serial.println("open error:read");
-    }
-    fd.close();
-    return text;
 }
 
 // start connect to WiFi AP(Tello)
