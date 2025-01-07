@@ -10,7 +10,7 @@
 
 #include "TelloESP32.h"
 #include <Ps3Controller.h>
-
+#include <Hardware_Control_Assistant.hpp>
 
 int player = 0;
 int battery_ps3 = 0;
@@ -64,7 +64,6 @@ bool connectedTello = false;
 void setup();
 void loop();
 // drone
-void controlTelloProcess(void);
 void connectToWiFi(const char *ssid, const char *password);
 void wifiEvent(WiFiEvent_t event);
 String listenMessage();
@@ -79,10 +78,17 @@ void onTelloError(const char* command, const char* errorMessage) {
 }
 
 // controller
+int battery = 0;
 void onConnect();
 // timer interrupt
 hw_timer_t * timer = NULL;
 void IRAM_ATTR onTimer();
+
+constexpr uint8_t chattering_count = 5;
+hca::Button_CHC start_button(chattering_count);
+hca::Button_CHC select_button(chattering_count);
+
+uint32_t sub_counter = 0;
 
 // -- setup function
 void setup() {
@@ -93,7 +99,7 @@ void setup() {
     pinMode(buttonPin, INPUT_PULLUP);
     pinMode(ledPin, OUTPUT);
     delay(100); // required delay
-    digitalWrite(ledPin, HIGH);
+    digitalWrite(ledPin, LOW);
 
     // -- client mode
     // WiFi connect to Tello
@@ -103,11 +109,13 @@ void setup() {
     Serial.println(passwordTello);
     connectToWiFi(ssidTello.c_str(), passwordTello.c_str());
     digitalWrite(ledPin, LOW);
+    // udp.begin(udpPortTello);
 
-    tello.setErrorCallback(onTelloError);
-    // Connect to Tello
-    tello.connect(TELLO_SSID, TELLO_PASSWORD);
-    Serial.println("Connected! Starting flight sequence...");
+    // tello.setErrorCallback(onTelloError);
+    // // Connect to Tello
+    // tello.connect(TELLO_SSID, TELLO_PASSWORD);
+    // Serial.println("Connected! Starting flight sequence...");
+    // digitalWrite(ledPin, HIGH);
 
     // コントローラ接続
     // ESP32のMACアドレスを表示
@@ -123,7 +131,7 @@ void setup() {
     timer = timerBegin(0, 80, true);
     timerAttachInterrupt(timer, &onTimer, true);
     timerAlarmWrite(timer, 10000, true); // 10ms
-    timerAlarmEnable(timer);
+    // timerAlarmEnable(timer);
 
     Serial.println("Ready.");
 }
@@ -131,55 +139,20 @@ void setup() {
 // -- main loop function
 void loop() {
     // -- client mode
-    if (connectedTello == true)
-    {
-    digitalWrite(ledPin, HIGH);
-    buttonState = digitalRead(buttonPin);
-    if (buttonState == LOW) {
-        controlTelloProcess();
-    }
-    } else {
-    digitalWrite(ledPin, LOW);
-    }
+    // if (connectedTello == true) {
+    //     digitalWrite(ledPin, HIGH);
+    //     buttonState = digitalRead(buttonPin);
+    //     if (buttonState == LOW) {
+    //         // controlTelloProcess();
+    //     }
+    // } else {
+    //     digitalWrite(ledPin, LOW);
+    // }
+    onTimer();
+    delay(10);
 }
 
 // -- client(controll Tello) mode process function
-void controlTelloProcess(void)
-{
-    Serial.println("start");
-    udp.begin(udpPortTello);
-
-    String message = "";
-    
-    sendMessage("command");
-    message = listenMessage();
-    Serial.println(":command");
-    Serial.println(message);
-    delay(1000);
-
-    // 離陸
-    sendMessage("takeoff");
-    delay(1000);
-    sendMessage("takeoff");
-    Serial.println(":takeoff");
-    message = listenMessage();
-    Serial.println(message);
-    sendMessage("takeoff");
-    delay(3000);
-
-    // 着陸
-    Serial.println(":land...");
-    for (uint8_t i = 0; i < 10; i++) {
-        sendMessage("land");
-        delay(700);
-    }
-    Serial.println(":...land");
-    message = listenMessage();
-    Serial.println(message);
-
-    Serial.println("finish!");
-}
-
 // start connect to WiFi AP(Tello)
 void connectToWiFi(const char *ssid, const char *password){
     Serial.print("Connecting : ");
@@ -195,7 +168,7 @@ void connectToWiFi(const char *ssid, const char *password){
     Serial.println("Waiting for WiFi connection...");
 }
 
-//wifi event handler
+// wifi event handler
 void wifiEvent(WiFiEvent_t event){
 
     switch(event) {
@@ -218,7 +191,7 @@ void wifiEvent(WiFiEvent_t event){
     }
 }
 
-//Telloからのレスポンスを確認する関数
+// Telloからのレスポンスを確認する関数
 String listenMessage() {
     char packetBuffer[255];
     int packetSize = udp.parsePacket();
@@ -243,25 +216,47 @@ String listenMessage() {
     return (char*) packetBuffer;
 }
 
-//UDPでTelloに命令を送る関数
+// UDPでTelloに命令を送る関数
 void sendMessage(char* ReplyBuffer) {
     udp.beginPacket(ipTello.c_str(), udpPortTello);
     udp.printf(ReplyBuffer);
     udp.endPacket();
 }
 
-// -- controller function
 void onConnect(){
-    Serial.println("Connected.");
+    Serial.println("Controller connected!");
 }
 
 // -- timer interrupt function
-uint32_t sub_counter = 0;
 void IRAM_ATTR onTimer(){
-    // Serial.println(battery_ps3);
-    if (battery_ps3 < 20) {
-        Ps3.setRumble(1.0, 1000);
+    if (!Ps3.isConnected() || !connectedTello) {
+        if (!Ps3.isConnected()) {
+            Serial.println("PS3 controller not connected!");
+        }
+        if (!connectedTello) {
+            Serial.println("Tello not connected!");
+        }
+        delay(1000);
+        return;
     }
+    start_button.update(Ps3.data.button.start);
+    select_button.update(Ps3.data.button.select);
+    if (start_button.is_pushed()) {
+        // tello.takeoff();
+        sendMessage("command");
+        sendMessage("takeoff");
+        Serial.println(":takeoff");
+    } else if (select_button.is_pushed()) {
+        // tello.land();
+        sendMessage("command");
+        sendMessage("land");
+        Serial.println(":land");
+    }
+
+    // tello.send_rc_control(-Ps3.data.analog.stick.rx, 
+    //                         -Ps3.data.analog.stick.ly, 
+    //                         (Ps3.data.analog.button.up-Ps3.data.analog.button.down)*0.5f, 
+    //                         -Ps3.data.analog.stick.lx);
 
     sub_counter++;
     if (sub_counter >= 100) { // 1000ms
