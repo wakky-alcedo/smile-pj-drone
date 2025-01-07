@@ -68,6 +68,7 @@ void connectToWiFi(const char *ssid, const char *password);
 void wifiEvent(WiFiEvent_t event);
 String listenMessage();
 void sendMessage(char* ReplyBuffer);
+void show_tello_state(TelloControl::TelloStatus status);
 
 const char* TELLO_SSID = "TELLO-CCDE6B";  // Replace with your Tello's SSID
 const char* TELLO_PASSWORD = "";          // Tello's WiFi password (usually empty)
@@ -103,16 +104,13 @@ void setup() {
 
     // -- client mode
     // WiFi connect to Tello
-    Serial.print("SSID Tello : ");
-    Serial.println(ssidTello);
-    Serial.print("Password Tello : ");
-    Serial.println(passwordTello);
     connectToWiFi(ssidTello.c_str(), passwordTello.c_str());
     digitalWrite(ledPin, LOW);
     // udp.begin(udpPortTello);
 
     // tello.setErrorCallback(onTelloError);
     // // Connect to Tello
+    // Serial.println("Connecting to Tello...");
     // tello.connect(TELLO_SSID, TELLO_PASSWORD);
     // Serial.println("Connected! Starting flight sequence...");
     // digitalWrite(ledPin, HIGH);
@@ -229,34 +227,40 @@ void onConnect(){
 
 // -- timer interrupt function
 void IRAM_ATTR onTimer(){
-    if (!Ps3.isConnected() || !connectedTello) {
+    if (!Ps3.isConnected() || !tello.isConnected()) {
         if (!Ps3.isConnected()) {
             Serial.println("PS3 controller not connected!");
         }
-        if (!connectedTello) {
+        if (!tello.isConnected()) {
             Serial.println("Tello not connected!");
+            tello.connect(TELLO_SSID, TELLO_PASSWORD);
+            Serial.println("Connected! Starting flight sequence...");
         }
         delay(1000);
         return;
     }
+
     start_button.update(Ps3.data.button.start);
     select_button.update(Ps3.data.button.select);
     if (start_button.is_pushed()) {
-        // tello.takeoff();
-        sendMessage("command");
-        sendMessage("takeoff");
         Serial.println(":takeoff");
+        show_tello_state(tello.takeoff());
     } else if (select_button.is_pushed()) {
-        // tello.land();
-        sendMessage("command");
-        sendMessage("land");
         Serial.println(":land");
+        show_tello_state(tello.land());
     }
 
-    // tello.send_rc_control(-Ps3.data.analog.stick.rx, 
-    //                         -Ps3.data.analog.stick.ly, 
-    //                         (Ps3.data.analog.button.up-Ps3.data.analog.button.down)*0.5f, 
-    //                         -Ps3.data.analog.stick.lx);
+    tello.send_rc_control(-Ps3.data.analog.stick.rx/1.28f, 
+                            -Ps3.data.analog.stick.ry/1.28f, 
+                            (Ps3.data.analog.button.up-Ps3.data.analog.button.down)/2.55f, 
+                            -Ps3.data.analog.stick.lx/1.28f);
+
+   if( abs(Ps3.event.analog_changed.stick.rx) + abs(Ps3.event.analog_changed.stick.ry) > 2 ){
+       Serial.print("Moved the right stick:");
+       Serial.print(" x="); Serial.print(Ps3.data.analog.stick.rx, DEC);
+       Serial.print(" y="); Serial.print(Ps3.data.analog.stick.ry, DEC);
+       Serial.println();
+   }
 
     sub_counter++;
     if (sub_counter >= 100) { // 1000ms
@@ -279,6 +283,43 @@ void IRAM_ATTR onTimer(){
             break;
         }
         sub_counter = 0;
+    }
+}
+
+void show_tello_state(TelloControl::TelloStatus status) {
+    // Serial.println("Tello State:");
+    // Serial.printf("Battery: %d%%\n", tello.query_battery());
+    // Serial.printf("Speed: %d cm/s\n", tello.query_speed());
+    // Serial.printf("Flight Time: %d s\n", tello.query_time());
+    // Serial.printf("Height: %d dm\n", tello.query_height());
+    // Serial.printf("Temperature: %d C\n", tello.query_temp());
+    // Serial.printf("Attitude: %s\n", tello.query_attitude().c_str());
+
+    switch (status) {
+    case TelloControl::TelloStatus::OK:
+        Serial.println("OK");
+        break;
+    case TelloControl::TelloStatus::Timeout:
+        Serial.println("Timeout");
+        break;
+    case TelloControl::TelloStatus::NotConnected:
+        Serial.println("NotConnected");
+        break;
+    case TelloControl::TelloStatus::ConnectionLost:
+        Serial.println("ConnectionLost");
+        break;
+    case TelloControl::TelloStatus::NoResponse:
+        Serial.println("NoResponse");
+        break;
+    case TelloControl::TelloStatus::InvalidParameter:
+        Serial.println("InvalidParameter");
+        break;
+    case TelloControl::TelloStatus::UdpError:
+        Serial.println("UdpError");
+        break;
+    case TelloControl::TelloStatus::UnknownError:
+        Serial.println("UnknownError");
+        break;
     }
 }
 
